@@ -1,0 +1,7 @@
+[submodule "minivm"]
+	path = minivm
+	url = https://github.com/fastvm/minivm
+	branch = int3
+[submodule "gumnut"]
+	path = gumnut
+	url = https://github.com/samthor/gumnut
