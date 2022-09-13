@@ -1,4 +1,4 @@
 [submodule "minivm"]
 	path = minivm
 	url = https://github.com/fastvm/minivm
-	branch = int3
+	branch = int3-lua
