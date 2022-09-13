@@ -1,5 +1,55 @@
 #lang lua
 
+local runtime = [[
+
+func vm.pow
+    bb r2 vm.pow.zero vm.pow.rec
+@vm.pow.zero
+    r0 <- int 1
+    ret r0
+@vm.pow.rec
+    r0 <- int 1
+    r0 <- sub r2 r0
+    r0 <- call vm.pow r1 r0
+    r1 <- mul r1 r0
+    ret r1
+end
+
+func vm.print.u
+    r0 <- int 10
+    blt r2 r0 vm.print.u.digit vm.print.u.ret 
+@vm.print.u.digit
+    r0 <- int 10
+    r0 <- div r2 r0
+    r0 <- call vm.print.u r1 r0
+@vm.print.u.ret
+    r0 <- int 10
+    r2 <- mod r2 r0
+    r0 <- int 48
+    r0 <- add r2 r0
+    putchar r0
+    r0 <- int 0
+    ret r0
+end
+
+func vm.println.i
+    r0 <- int 0
+    blt r2 r0 vm.println.i.pos vm.println.i.neg
+@vm.println.i.neg
+    r0 <- int 45
+    putchar r0
+    r0 <- int 0
+    r2 <- sub r0 r2
+@vm.println.i.pos
+    r0 <- call vm.print.u r1 r2
+    r0 <- int 10
+    putchar r0
+    r0 <- int 0
+    ret r0
+end
+
+]]
+
 local expr = {}
 
 expr.program = function(ast)
@@ -112,6 +162,8 @@ expr.program = function(ast)
             end
             add('exit')
             pop()
+        elseif ast.type == 'parens' then
+            return compile(ast[1])
         elseif ast.type == 'block' then
             for i=1, #ast do
                 compile(ast[i])
@@ -123,16 +175,38 @@ expr.program = function(ast)
                 varname = varname[1]
             end
             add('r' .. name(varname), '<-', 'reg', 'r' .. from)
-        elseif ast.type == 'local' then
-            local ret = reg()
-            cself = ast[1][1]
-            if type(cself) ~= 'string' then
-                cself = cself[1]
+        elseif ast.type == 'for' then
+            local name = ast[1][1]
+            local start = compile(ast[2])
+            local stop = compile(ast[3])
+            local iff = gensym()
+            local ift = gensym()
+            local iter = reg()
+            stack[#stack].locals[name] = iter
+            add('r' .. iter, '<-', 'reg', 'r' .. start)
+            add('blt', 'r' .. stop, 'r' .. iter, ift, iff)
+            add('@' .. ift)
+            compile(ast[#ast])
+            if #ast == 4 then
+                add('r0', '<-', 'int', '1')
+                add('r' .. iter, '<-', 'add', 'r' .. iter, 'r0')
+            else
+                local val = compile(ast[4])
+                add('r' .. iter, '<-', 'add', 'r' .. iter, 'r' .. val)
             end
-            stack[#stack].locals[cself] = ret
-            local from = compile(ast[2])
-            cself = nil
-            add('r' .. ret, '<-', 'reg', 'r' .. from)
+            add('blt', 'r' .. stop, 'r' .. iter, ift, iff)
+            add('@' .. iff)
+        elseif ast.type == 'local' then
+            local tos = ast[1]
+            local froms = ast[2]
+            for i=1, #tos do
+                local ret = reg()
+                cself = tos[i][1]
+                stack[#stack].locals[cself] = ret
+                local from = compile(froms[i])
+                cself = nil
+                add('r' .. ret, '<-', 'reg', 'r' .. from)
+            end
         elseif ast.type == 'lambda' then
             local count = 1
             for name, reg in pairs(stack[#stack].locals) do
@@ -195,42 +269,55 @@ expr.program = function(ast)
             end
             ends[#ends] = nil
             add('@' .. out)
-        elseif ast.type == '+' then
-            local out = reg()
+        elseif ast.type == '^' then
             local lhs = compile(ast[1])
             local rhs = compile(ast[2])
+            local out = reg()
+            add('r' .. out, '<-', 'call vm.pow', 'r' .. lhs, 'r' .. rhs)
+            return out
+        elseif ast.type == 'neg' then
+            local out = reg()
+            local rhs = compile(ast[1])
+            add('r0', '<-', 'int', '0')
+            add('r' .. out, '<-', 'sub', 'r0', 'r' .. rhs)
+            return out
+        elseif ast.type == '+' then
+            local lhs = compile(ast[1])
+            local rhs = compile(ast[2])
+            local out = reg()
             add('r' .. out, '<-', 'add', 'r' .. lhs, 'r' .. rhs)
             return out
         elseif ast.type == '-' then
-            local out = reg()
             local lhs = compile(ast[1])
             local rhs = compile(ast[2])
+            local out = reg()
             add('r' .. out, '<-', 'sub', 'r' .. lhs, 'r' .. rhs)
             return out
         elseif ast.type == '*' then
             local out = reg()
             local lhs = compile(ast[1])
             local rhs = compile(ast[2])
+            local out = reg()
             add('r' .. out, '<-', 'mul', 'r' .. lhs, 'r' .. rhs)
             return out
         elseif ast.type == '/' then
-            local out = reg()
             local lhs = compile(ast[1])
             local rhs = compile(ast[2])
+            local out = reg()
             add('r' .. out, '<-', 'div', 'r' .. lhs, 'r' .. rhs)
             return out
         elseif ast.type == '%' then
-            local out = reg()
             local lhs = compile(ast[1])
             local rhs = compile(ast[2])
+            local out = reg()
             add('r' .. out, '<-', 'mod', 'r' .. lhs, 'r' .. rhs)
             return out
         elseif ast.type == '<' or ast.type == '>' or ast.type == '<=' or ast.type == '>=' or ast.type == '==' or ast.type == '~=' then
-            local out = reg()
             local iff = gensym()
             local ift = gensym()
             local done = gensym()
             branch(ast[1], iff, ift)
+            local out = reg()
             add('@' .. iff)
             add('r' .. out, '<-', 'int', '0')
             add('jump', done)
@@ -245,8 +332,6 @@ expr.program = function(ast)
             for i=2, #ast do
                 regs[#regs + 1] = 'r' .. compile(ast[i])
             end
-            -- add('r0', '<-', 'int', '0')
-            -- add('r0', '<-', 'get', 'r' .. func, 'r0')
             add('r' .. out, '<-', 'ccall', 'r' .. func, table.concat(regs, ' '))
             return out
         elseif ast.type == 'number' then
@@ -263,6 +348,13 @@ expr.program = function(ast)
             end
         elseif ast.type == 'from' then
             return compile(ast[1])
+        elseif ast.type == 'length' then
+            local obj = compile(ast[1])
+            local out = reg()
+            add('r' .. out, '<-', 'len', 'r' .. obj)
+            add('r0', '<-', 'int', '1')
+            add('r' .. out, '<-', 'sub', 'r' .. out, 'r0')
+            return out
         elseif ast.type == 'index' then
             local obj = compile(ast[1])
             local ind = compile(ast[2])
@@ -274,9 +366,9 @@ expr.program = function(ast)
             add('r0', '<-', 'int', #ast + 1)
             add('r' .. out, '<-', 'arr', 'r0')
             for i=1, #ast do
-                add('r0', '<-', 'int', i)
                 local tmp = compile(ast[i][1])
-                add('set', 'r' .. out, 'r' .. tmp, 'r0')
+                add('r0', '<-', 'int', i)
+                add('set', 'r' .. out, 'r0', 'r' .. tmp)
             end
             return out
         elseif ast.type == 'while' then
@@ -301,53 +393,20 @@ expr.program = function(ast)
                     end
                 end
                 if ast[1] == 'print' then
-                    local block1 = push()
-                    local digit = gensym()
-                    local ret = gensym()
-                    add('bb r2', ret, digit)
-                    add('@' .. digit)
-                    add('r0', '<-', 'int', '10')
-                    add('r0', '<-', 'div', 'r2', 'r0')
-                    add('r0', '<-', 'call', block1.name, 'r1', 'r0')
-                    add('r0', '<-', 'int', '10')
-                    add('r2', '<-', 'mod', 'r2', 'r0')
-                    add('r0', '<-', 'int', '48')
-                    add('r2', '<-', 'add', 'r2', 'r0')
-                    add('putchar', 'r2')
-                    add('@' .. ret)
-                    add('r0', '<-', 'int', '0')
-                    add('ret', 'r0')
-                    pop()
-                    local block2 = push()
-                    local zero = gensym()
-                    local more = gensym()
-                    add('bb r2', zero, more)
-                    add('@' .. zero)
-                    add('r0 <- int 48')
-                    add('putchar r0')
-                    add('r0 <- int 10')
-                    add('putchar r0')
-                    add('r0 <- int 0')
-                    add('ret r0')
-                    add('@' .. more)
-                    add('r0', '<-', 'call', block1.name, 'r1', 'r2')
-                    add('r0 <- int 10')
-                    add('putchar r0')
-                    add('r0 <- int 0')
-                    add('ret r0')
-                    pop()
                     local ret = reg()
                     local value = reg()
                     add('r0', '<-', 'int', 1)
                     add('r' .. ret, '<-', 'arr', 'r0')
-                    add('r' .. value, '<-', 'addr', block2.name)
+                    add('r' .. value, '<-', 'addr', 'vm.println.i')
                     add('r0', '<-', 'int', '0')
                     add('set', 'r' .. ret, 'r0', 'r' .. value)
                     return ret
                 end
+                print('--- ERROR ---')
                 for k,v in pairs(stack[#stack].locals) do
                     print(ast[1], k)
                 end
+                print()
             end
         else
             print(ast)
@@ -356,7 +415,7 @@ expr.program = function(ast)
 
     compile(ast)
 
-    return table.concat(done, '\n\n')
+    return runtime .. table.concat(done, '\n\n')
 end
 
 return expr

@@ -442,16 +442,18 @@ lua.fieldvalue = lua.ast('fieldvalue', lua.ignore(parser.exact('[')), lua.expr, 
 lua.field = parser.first(lua.fieldnamed, lua.fieldnth, lua.fieldvalue)
 lua.table = lua.ast('table', lua.ignore(parser.exact('{')), parser.transform(parser.sep(lua.field, parser.exact(',')), astlist), lua.ignore(parser.exact('}')))
 lua.lambda = lua.ast('lambda', lua.keyword('function'), lua.params, lua.chunk, lua.keyword('end'))
-lua.single = parser.first(lua.string, lua.number, lua.lambda, lua.ident, lua.table, lua.literal)
+lua.parens = lua.ast('parens', lua.ignore(parser.exact('(')), lua.expr, lua.ignore(parser.exact(')')))
+lua.single = parser.first(lua.string, lua.number, lua.lambda, lua.ident, lua.table, lua.literal, lua.parens)
 lua.args = parser.first(lua.ast('call', lua.string), lua.ast('call', lua.table), lua.ast('call', lua.ignore(parser.exact('(')), parser.transform(parser.sep(lua.expr, lua.wrap(parser.exact(','))), astlist), lua.ignore(parser.exact(')'))))
 lua.index = lua.ast('index', lua.ignore(parser.exact('[')), lua.expr, lua.ignore(parser.exact(']')))
 lua.dotindex = lua.ast('dotindex', lua.ignore(parser.exact('.')), lua.ident)
 lua.methodcall = lua.ast('method', lua.ignore(parser.exact(':')), lua.ident, lua.args)
 lua.postext = parser.first(lua.args, lua.index, lua.dotindex, lua.methodcall)
 lua.post = parser.transform(lua.ast('postfix', lua.single, parser.transform(parser.list0(lua.postext), astlist)), unpostfix)
-lua.pre = parser.first(lua.ast('length', lua.ignore(parser.exact('#')), lua.post), lua.ast('not', lua.keyword('not'), lua.post), lua.post)
+lua.pre = parser.first(lua.ast('length', lua.ignore(parser.exact('#')), lua.post), lua.ast('not', lua.keyword('not'), lua.post), lua.ast('neg', lua.ignore(parser.exact('-')), lua.post), lua.post)
 
-lua.mulexpr = lua.binop(lua.pre, {'*', '/', '%'})
+lua.powexpr = lua.binop(lua.pre, {'^'})
+lua.mulexpr = lua.binop(lua.powexpr, {'*', '/', '%'})
 lua.addexpr = lua.binop(lua.mulexpr, {'+', '-'})
 lua.catexpr = lua.binop(lua.addexpr, {'..'})
 lua.compare = lua.binop(lua.catexpr, {'<=', '>=', '==', '~=', '<', '>'})
@@ -466,7 +468,7 @@ lua.posts = lua.ast('to', parser.transform(parser.sep1(lua.post, parser.exact(',
 
 lua.stmtlocalfunction = lua.ast('local',
     lua.keyword('local'), lua.keyword('function'),
-    lua.ident, lua.ast('lambda', lua.params, lua.chunk),
+    lua.ast('to', lua.ident), lua.ast('from', lua.ast('lambda', lua.params, lua.chunk)),
     lua.keyword('end')
 )
 lua.assigns = lua.ast('assign', lua.posts, lua.ignore(parser.exact('=')), lua.exprs)
