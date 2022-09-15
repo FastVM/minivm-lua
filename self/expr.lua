@@ -138,6 +138,8 @@ expr.program = function(ast)
 
     local compile = nil
 
+    local breakv = nil
+
     branch = function(ast, iffalse, iftrue)
         if ast.type == '<' then
             local lhs = compile(ast[1])
@@ -205,7 +207,9 @@ expr.program = function(ast)
                 else
                     print('bad set: ' .. varname.type)
                 end
-        end
+            end
+        elseif ast.type == 'break' then
+            add('jump', breakv)
         elseif ast.type == 'for' then
             local name = ast[1][1]
             local start = compile(ast[2])
@@ -217,7 +221,10 @@ expr.program = function(ast)
             add('r' .. iter, '<-', 'reg', 'r' .. start)
             add('blt', 'r' .. stop, 'r' .. iter, ift, iff)
             add('@' .. ift)
+            local bv = breakv
+            breakv = iff
             compile(ast[#ast])
+            breakv = bv
             if #ast == 4 then
                 add('r0', '<-', 'int', '1')
                 add('r' .. iter, '<-', 'add', 'r' .. iter, 'r0')
@@ -234,11 +241,15 @@ expr.program = function(ast)
                 local ret = reg()
                 local to = tos[i]
                 if to.type == 'ident' then
-                    cself = to[1]
-                    stack[#stack].locals[cself] = ret
-                    local from = compile(froms[i])
-                    cself = nil
-                    add('r' .. ret, '<-', 'reg', 'r' .. from)
+                    if froms and froms[i] then
+                        cself = to[1]
+                        stack[#stack].locals[cself] = ret
+                        local from = compile(froms[i])
+                        cself = nil
+                        add('r' .. ret, '<-', 'reg', 'r' .. from)
+                    else
+                        add('r' .. ret, '<-', 'nil')
+                    end
                 else
                     print(to.type)
                 end

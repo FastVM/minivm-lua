@@ -1,5 +1,7 @@
 local t = {}
 
-t.x = 2
-
-print(t.x)
+if t.y then
+    print(1)
+else
+    print(0)
+end

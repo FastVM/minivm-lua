@@ -1,23 +1,44 @@
 
-local write, char, unpack = io.write, string.char, unpack
-local N = tonumber(arg and arg[1]) or 100
-local M, ba, bb, buf = 2/N, 2^(N%8+1)-1, 2^(8-N%8), {}
-write("P4\n", N, " ", N, "\n")
-for y=0,N-1 do
-  local Ci, b, p = y*M-1, 1, 0
-  for x=0,N-1 do
-    local Cr = x*M-1.5
-    local Zr, Zi, Zrq, Ziq = Cr, Ci, Cr*Cr, Ci*Ci
-    b = b + b
-    for i=1,49 do
-      Zi = Zr*Zi*2 + Ci
-      Zr = Zrq-Ziq + Cr
-      Ziq = Zi*Zi
-      Zrq = Zr*Zr
-      if Zrq+Ziq > 4.0 then b = b + 1; break; end
+
+local function mandel(width)
+  local height, wscale = width, 2/width
+  local m, limit2 = 50, 4
+  local sum = 0
+  for y=0,height-1 do
+    local Ci = 2*y / height - 1
+    for xb=0,width-1,8 do
+      local bits = 0
+      local xbb = xb+7
+      local xblimit
+      if xbb < width then
+        xblimit = xbb
+      else
+        xblimit = width-1
+      end
+      for x=xb,xblimit do
+        bits = bits + bits
+        local Zr, Zi, Zrq, Ziq = 0, 0, 0, 0
+        local Cr = x * wscale - 2/3
+        for i=1,m do
+          local Zri = Zr*Zi
+          Zr = Zrq - Ziq + Cr
+          Zi = Zri + Zri + Ci
+          Zrq = Zr*Zr
+          Ziq = Zi*Zi
+          if Zrq + Ziq > limit2 then
+            bits = bits + 1
+            break
+          end
+        end
+      end
+      if xbb >= width then
+        for x=width,xbb do bits = bits + bits + 1 end
+      end
+      sum = sum + bits
     end
-    if b >= 256 then p = p + 1; buf[p] = 511 - b; b = 1; end
   end
-  if b ~= 1 then p = p + 1; buf[p] = (ba-b)*bb; end
-  write(char(unpack(buf, 1, p)))
+  return sum
 end
+
+local res = mandel(1024)
+print(res)
