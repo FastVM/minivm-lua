@@ -73,6 +73,7 @@ function parser.eof(state, ok, err)
     if state.pos > string.len(state.src) then
         return ok(state, nil)
     else
+        print(string.sub(state.src, 0, state.pos))
         return err(state, 'error (Ln ' .. state.best.line .. ', Col ' .. state.best.col .. ')')
     end
 end
@@ -460,6 +461,7 @@ lua.compare = lua.binop(lua.catexpr, {'<=', '>=', '==', '~=', '<', '>'})
 lua.logic = lua.binop(lua.compare, {'and', 'or'})
 lua.expr = lua.logic
 
+lua.post0 = parser.transform(lua.ast('postfix', lua.single, parser.transform(parser.list0(lua.dotindex), astlist)), unpostfix)
 lua.post1 = parser.transform(lua.ast('postfix', lua.single, parser.transform(parser.list1(lua.postext), astlist)), unpostfix)
 
 lua.idents = lua.ast('to', parser.transform(parser.sep1(lua.ident, parser.exact(',')), astlist))
@@ -478,7 +480,7 @@ lua.ifelseif = lua.ast('case', lua.keyword('elseif'), lua.expr, lua.keyword('the
 lua.ifelseifs = parser.transform(parser.list0(lua.ifelseif), astlist)
 lua.stmtif = lua.ast('cond', lua.keyword('if'), lua.ast('case', lua.expr, lua.keyword('then'), lua.chunk), lua.ifelseifs, lua.maybe(lua.ifelse), lua.keyword('end'))
 lua.stmtwhile = lua.ast('while', lua.keyword('while'), lua.expr, lua.keyword('do'), lua.chunk, lua.keyword('end'))
-lua.stmtfunction = lua.ast('function', lua.keyword('function'), lua.post1, lua.chunk, lua.keyword('end'))
+lua.stmtfunction = lua.ast('assign', lua.keyword('function'), lua.post0, lua.ast('lambda', lua.params, lua.chunk), lua.keyword('end'))
 lua.stmtfor = lua.ast('for', lua.keyword('for'), lua.ident, lua.ignore(parser.exact('=')), lua.expr, lua.ignore(parser.exact(',')), lua.expr, lua.maybe(parser.select(2, parser.exact(','), lua.expr)), lua.keyword('do'), lua.chunk, lua.keyword('end'))
 lua.stmtforin = lua.ast('forin', lua.keyword('for'), lua.idents, lua.keyword('in'), lua.exprs, lua.keyword('do'), lua.chunk, lua.keyword('end'))
 lua.stmtdo = parser.select(2, lua.keyword('do'), lua.chunk, lua.keyword('end'))

@@ -1,0 +1,3 @@
+#!/usr/bin/env sh
+
+lua /home/shaws/code/minivm-lua/self/lua.lua $1 /dev/stdout | /home/shaws/code/minivm-lua/minivm/bin/minivm-asm /dev/stdin

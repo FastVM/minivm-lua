@@ -12,13 +12,13 @@ local function Main(N)
     end
     
     local function ItemCheck(tree)
-        if #tree == 3 then
+        if tree[2] then
             return tree[1] + ItemCheck(tree[2]) - ItemCheck(tree[3])
         else
             return tree[1]
         end
     end
-    
+
     local mindepth = 4
     local maxdepth = mindepth + 2
     if maxdepth < N then maxdepth = N end

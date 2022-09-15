@@ -1,1 +1,5 @@
-print(2 ^ 10)
+local t = {}
+
+t.x = 2
+
+print(t.x)

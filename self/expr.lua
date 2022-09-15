@@ -3,7 +3,8 @@
 local runtime = [[
 
 func vm.pow
-    bb r2 vm.pow.zero vm.pow.rec
+    r0 <- int 0
+    beq r2 r0 vm.pow.rec vm.pow.zero
 @vm.pow.zero
     r0 <- int 1
     ret r0
@@ -118,6 +119,21 @@ expr.program = function(ast)
 
     local cself = nil
 
+    local function pstr(str)
+        local len = string.len(str)
+        local out = reg()
+        add('r0', '<-', 'int', len)
+        add('r' .. out, '<-', 'arr', 'r0')
+        local tmp = reg()
+        for i=1, len do
+            local val = string.byte(str, i)
+            add('r' .. tmp, '<-', 'int', val)
+            add('r0', '<-', 'int', i-1)
+            add('set', 'r' .. out, 'r0', 'r' .. tmp)
+        end
+        return out
+    end
+
     local branch = nil
 
     local compile = nil
@@ -169,12 +185,27 @@ expr.program = function(ast)
                 compile(ast[i])
             end
         elseif ast.type == 'assign' then
-            local from = compile(ast[2])
-            local varname = ast[1][1]
-            if type(varname) ~= 'string' then
-                varname = varname[1]
+            local tos = ast[1]
+            local froms = ast[2]
+            if tos.type ~= 'to' then
+                tos = {tos}
             end
-            add('r' .. name(varname), '<-', 'reg', 'r' .. from)
+            if froms.type ~= 'from' then
+                froms = {froms}
+            end
+            for i=1, #tos do
+                local from = compile(froms[i])
+                local varname = tos[i]
+                if varname.type == 'ident' then
+                    add('r' .. name(varname[1]), '<-', 'reg', 'r' .. from)
+                elseif varname.type == 'dotindex' then
+                    local obj = compile(varname[1])
+                    local ind = pstr(varname[2][1])
+                    add('set', 'r' .. obj, 'r' .. ind, 'r' .. from)
+                else
+                    print('bad set: ' .. varname.type)
+                end
+        end
         elseif ast.type == 'for' then
             local name = ast[1][1]
             local start = compile(ast[2])
@@ -201,11 +232,16 @@ expr.program = function(ast)
             local froms = ast[2]
             for i=1, #tos do
                 local ret = reg()
-                cself = tos[i][1]
-                stack[#stack].locals[cself] = ret
-                local from = compile(froms[i])
-                cself = nil
-                add('r' .. ret, '<-', 'reg', 'r' .. from)
+                local to = tos[i]
+                if to.type == 'ident' then
+                    cself = to[1]
+                    stack[#stack].locals[cself] = ret
+                    local from = compile(froms[i])
+                    cself = nil
+                    add('r' .. ret, '<-', 'reg', 'r' .. from)
+                else
+                    print(to.type)
+                end
             end
         elseif ast.type == 'lambda' then
             local count = 1
@@ -319,10 +355,10 @@ expr.program = function(ast)
             branch(ast[1], iff, ift)
             local out = reg()
             add('@' .. iff)
-            add('r' .. out, '<-', 'int', '0')
+            add('r' .. out, '<-', 'int', 'false')
             add('jump', done)
             add('@' .. ift)
-            add('r' .. out, '<-', 'int', '1')
+            add('r' .. out, '<-', 'int', 'true')
             add('@' .. done)
             return out
         elseif ast.type == 'call' then
@@ -332,7 +368,7 @@ expr.program = function(ast)
             for i=2, #ast do
                 regs[#regs + 1] = 'r' .. compile(ast[i])
             end
-            add('r' .. out, '<-', 'ccall', 'r' .. func, table.concat(regs, ' '))
+            add('r' .. out, '<-', 'dcall', 'r' .. func, table.concat(regs, ' '))
             return out
         elseif ast.type == 'number' then
             local out = reg()
@@ -355,6 +391,12 @@ expr.program = function(ast)
             add('r0', '<-', 'int', '1')
             add('r' .. out, '<-', 'sub', 'r' .. out, 'r0')
             return out
+        elseif ast.type == 'dotindex' then
+            local obj = compile(ast[1])
+            local ind = pstr(ast[2][1])
+            local ret = reg()
+            add('r' .. ret, '<-', 'get', 'r' .. obj, 'r' .. ind)
+            return ret
         elseif ast.type == 'index' then
             local obj = compile(ast[1])
             local ind = compile(ast[2])
@@ -363,12 +405,16 @@ expr.program = function(ast)
             return out
         elseif ast.type == 'table' then
             local out = reg()
-            add('r0', '<-', 'int', #ast + 1)
-            add('r' .. out, '<-', 'arr', 'r0')
+            -- add('r0', '<-', 'int', #ast + 1)
+            add('r' .. out, '<-', 'tab')
             for i=1, #ast do
-                local tmp = compile(ast[i][1])
-                add('r0', '<-', 'int', i)
-                add('set', 'r' .. out, 'r0', 'r' .. tmp)
+                if ast[i].type == 'fieldnth' then
+                    local tmp = compile(ast[i][1])
+                    add('r0', '<-', 'int', i)
+                    add('set', 'r' .. out, 'r0', 'r' .. tmp)
+                else
+                    print(ast[i])
+                end
             end
             return out
         elseif ast.type == 'while' then
@@ -384,9 +430,10 @@ expr.program = function(ast)
                 return name(ast[1])
             else
                 for i=1, #captures do
-                    if captures[i].name == ast[1] then
+                    local cur = captures[i]
+                    if cur.name == ast[1] then
                         local out = reg()
-                        add('r0', '<-', 'int', i)
+                        add('r0', '<-', 'int', cur.index)
                         add('r' .. out, '<-', 'get', 'r1', 'r0')
                         stack[#stack].locals[ast[1]] = out
                         return out
