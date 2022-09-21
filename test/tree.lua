@@ -44,4 +44,4 @@ local function Main(N)
     print(ItemCheck(longlivedtree))
 end
 
-Main(16)
+Main(14)
