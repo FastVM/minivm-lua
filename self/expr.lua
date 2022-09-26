@@ -170,6 +170,8 @@ expr.program = function(ast)
             local lhs = compile(ast[1])
             local rhs = compile(ast[2])
             add('beq', lhs.name, rhs.name, iffalse, iftrue)
+        elseif ast.type == 'not' then
+            branch(ast[1], iftrue, iffalse)
         else
             local case = compile(ast)
             add('bb', case.name, iffalse, iftrue)
@@ -434,17 +436,29 @@ expr.program = function(ast)
             out = out or reg()
             add(out.name, '<-', 'mod', lhs.name, rhs.name)
             return out
-        elseif ast.type == '<' or ast.type == '>' or ast.type == '<=' or ast.type == '>=' or ast.type == '==' or ast.type == '~=' then
+        elseif ast.type == 'literal' then
+            out = out or reg()
+            if ast[1] == 'nil' then
+                add(out.name, '<-', 'nil')
+            elseif ast[1] == 'false' then
+                add(out.name, '<-', 'false')
+            elseif ast[1] == 'true' then
+                add(out.name, '<-', 'true')
+            else
+                print('bad literal: ' .. ast[1])
+            end
+            return out
+        elseif ast.type == 'not' or ast.type == '<' or ast.type == '>' or ast.type == '<=' or ast.type == '>=' or ast.type == '==' or ast.type == '~=' then
             local iff = gensym()
             local ift = gensym()
             local done = gensym()
-            branch(ast[1], iff, ift)
+            branch(ast, iff, ift)
             out = out or reg()
             add('@' .. iff)
-            add(out.name, '<-', 'int', 'false')
+            add(out.name, '<-', 'false')
             add('jump', done)
             add('@' .. ift)
-            add(out.name, '<-', 'int', 'true')
+            add(out.name, '<-', 'true')
             add('@' .. done)
             return out
         elseif ast.type == 'call' then
@@ -466,7 +480,7 @@ expr.program = function(ast)
             return out
         elseif ast.type == 'return' then
             if #ast == 0 then
-                add('r0', '<-', 'int', '0')
+                add('r0', '<-', 'nil')
                 add('ret', 'r0')
             else
                 local val = compile(ast[1])
